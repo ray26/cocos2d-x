@@ -27,6 +27,9 @@
 #include "2d/CCSpriteFrameCache.h"
 #include "base/CCVector.h"
 #include "base/CCDirector.h"
+#include "renderer/CCGLProgram.h"
+#include "ui/shaders/UIShaders.h"
+#include "renderer/ccShaders.h"
 
 NS_CC_BEGIN
 namespace ui {
@@ -45,11 +48,14 @@ namespace ui {
     , _bottomLeft(nullptr)
     , _bottom(nullptr)
     , _bottomRight(nullptr)
+    , _scale9Enabled(true)
     , _insetLeft(0)
     , _insetTop(0)
     , _insetRight(0)
     , _insetBottom(0)
-    , _scale9Enabled(true)
+    ,_flippedX(false)
+    ,_flippedY(false)
+
     {
         this->setAnchorPoint(Vec2(0.5,0.5));
     }
@@ -801,6 +807,40 @@ y+=ytranslate;         \
         return NULL;
     }
     
+    void Scale9Sprite::setState(cocos2d::ui::Scale9Sprite::State state)
+    {
+        GLProgramState *glState = nullptr;
+        switch (state)
+        {
+            case State::NORMAL:
+            {
+                glState = GLProgramState::getOrCreateWithGLProgramName(GLProgram::SHADER_NAME_POSITION_TEXTURE_COLOR_NO_MVP);
+            }
+                break;
+            case State::GRAY:
+            {
+                auto program = GLProgram::createWithByteArrays(ccPositionTextureColor_noMVP_vert,
+                                                               ccUIGrayScale_frag);
+                glState = GLProgramState::getOrCreateWithGLProgram(program);
+            }
+            default:
+                break;
+        }
+        
+        if (nullptr != _scale9Image)
+        {
+            _scale9Image->setGLProgramState(glState);
+        }
+        
+        if (_scale9Enabled)
+        {
+            for (auto& sp : _protectedChildren)
+            {
+                sp->setGLProgramState(glState);
+            }
+        }
+    }
+    
     /** sets the opacity.
      @warning If the the texture has premultiplied alpha then, the R, G and B channels will be modifed.
      Values goes from 0 to 255, where 255 means fully opaque.
@@ -1021,6 +1061,9 @@ y+=ytranslate;         \
         this->cleanupSlicedSprites();
         _protectedChildren.clear();
         
+        //we must invalide the transform when toggling scale9enabled
+        _transformUpdated = _transformDirty = _inverseDirty = true;
+        
         if (_scale9Enabled)
         {
             if (_scale9Image)
@@ -1208,34 +1251,17 @@ y+=ytranslate;         \
     
     void Scale9Sprite::setFlippedX(bool flippedX)
     {
+     
+        float realScale = this->getScaleX();
         _flippedX = flippedX;
-        if (_scale9Enabled)
-        {
-            this->setScaleX(-1);
-        }
-        else
-        {
-            if (_scale9Image)
-            {
-                _scale9Image->setFlippedX(flippedX);
-            }
-        }
+        this->setScaleX(realScale);
     }
     
     void Scale9Sprite::setFlippedY(bool flippedY)
     {
+        float realScale = this->getScaleY();
         _flippedY = flippedY;
-        if (_scale9Enabled)
-        {
-            this->setScaleY(-1);
-        }
-        else
-        {
-            if (_scale9Image)
-            {
-                _scale9Image->setFlippedY(flippedY);
-            }
-        }
+        this->setScaleY(realScale);
     }
     
     bool Scale9Sprite::isFlippedX()const
@@ -1247,4 +1273,60 @@ y+=ytranslate;         \
     {
         return _flippedY;
     }
+    
+    void Scale9Sprite::setScaleX(float scaleX)
+    {
+        if (_flippedX) {
+            scaleX = scaleX * -1;
+        }
+        Node::setScaleX(scaleX);
+    }
+    
+    void Scale9Sprite::setScaleY(float scaleY)
+    {
+        if (_flippedY) {
+            scaleY = scaleY * -1;
+        }
+        Node::setScaleY(scaleY);
+    }
+    
+    void Scale9Sprite::setScale(float scale)
+    {
+        this->setScaleX(scale);
+        this->setScaleY(scale);
+        this->setScaleZ(scale);
+    }
+    
+    void Scale9Sprite::setScale(float scaleX, float scaleY)
+    {
+        this->setScaleX(scaleX);
+        this->setScaleY(scaleY);
+    }
+    
+    float Scale9Sprite::getScaleX()const
+    {
+        float originalScale = Node::getScaleX();
+        if (_flippedX)
+        {
+            originalScale = originalScale * -1.0;
+        }
+        return originalScale;
+    }
+    
+    float Scale9Sprite::getScaleY()const
+    {
+        float originalScale = Node::getScaleY();
+        if (_flippedY)
+        {
+            originalScale = originalScale * -1.0;
+        }
+        return originalScale;
+    }
+    
+    float Scale9Sprite::getScale()const
+    {
+        CCASSERT(this->getScaleX() == this->getScaleY(), "Scale9Sprite#scale. ScaleX != ScaleY. Don't know which one to return");
+        return this->getScaleX();
+    }
+    
 }}

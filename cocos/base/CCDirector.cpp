@@ -57,6 +57,7 @@ THE SOFTWARE.
 #include "base/CCConsole.h"
 #include "base/CCAutoreleasePool.h"
 #include "base/CCConfiguration.h"
+#include "base/CCAsyncTaskPool.h"
 #include "platform/CCApplication.h"
 //#include "platform/CCGLViewImpl.h"
 
@@ -67,7 +68,7 @@ THE SOFTWARE.
  */
 #ifndef CC_DIRECTOR_STATS_POSITION
 #define CC_DIRECTOR_STATS_POSITION Director::getInstance()->getVisibleOrigin()
-#endif
+#endif // CC_DIRECTOR_STATS_POSITION
 
 using namespace std;
 
@@ -117,7 +118,7 @@ bool Director::init(void)
     _accumDt = 0.0f;
     _frameRate = 0.0f;
     _FPSLabel = _drawnBatchesLabel = _drawnVerticesLabel = nullptr;
-    _totalFrames = _frames = 0;
+    _totalFrames = 0;
     _lastUpdate = new struct timeval;
 
     // paused ?
@@ -155,9 +156,14 @@ bool Director::init(void)
 
     _renderer = new (std::nothrow) Renderer;
 
-#if (CC_TARGET_PLATFORM != CC_PLATFORM_WINRT)
     _console = new (std::nothrow) Console;
-#endif
+    
+    // default clear color
+    _clearColor.r = 0;
+    _clearColor.g = 0;
+    _clearColor.b = 0;
+    _clearColor.a = 1.0;
+
     return true;
 }
 
@@ -181,9 +187,8 @@ Director::~Director(void)
 
     delete _renderer;
 
-#if (CC_TARGET_PLATFORM != CC_PLATFORM_WINRT)
     delete _console;
-#endif
+
 
     CC_SAFE_RELEASE(_eventDispatcher);
     
@@ -243,7 +248,7 @@ void Director::setGLDefaultValues()
     setProjection(_projection);
 
     // set other opengl default values
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(_clearColor.r, _clearColor.g, _clearColor.b, _clearColor.a);
 }
 
 // Draw the Scene
@@ -432,7 +437,13 @@ void Director::setNextDeltaTimeZero(bool nextDeltaTimeZero)
 {
     _nextDeltaTimeZero = nextDeltaTimeZero;
 }
-   
+
+//
+// FIXME TODO
+// Matrix code MUST NOT be part of the Director
+// MUST BE moved outide.
+// Why the Director must have this code ?
+//
 void Director::initMatrixStack()
 {
     while (!_modelViewMatrixStack.empty())
@@ -542,15 +553,15 @@ void Director::multiplyMatrix(MATRIX_STACK_TYPE type, const Mat4& mat)
 
 void Director::pushMatrix(MATRIX_STACK_TYPE type)
 {
-    if(MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW == type)
+    if(type == MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW)
     {
         _modelViewMatrixStack.push(_modelViewMatrixStack.top());
     }
-    else if(MATRIX_STACK_TYPE::MATRIX_STACK_PROJECTION == type)
+    else if(type == MATRIX_STACK_TYPE::MATRIX_STACK_PROJECTION)
     {
         _projectionMatrixStack.push(_projectionMatrixStack.top());
     }
-    else if(MATRIX_STACK_TYPE::MATRIX_STACK_TEXTURE == type)
+    else if(type == MATRIX_STACK_TYPE::MATRIX_STACK_TEXTURE)
     {
         _textureMatrixStack.push(_textureMatrixStack.top());
     }
@@ -560,36 +571,23 @@ void Director::pushMatrix(MATRIX_STACK_TYPE type)
     }
 }
 
-Mat4 Director::getMatrix(MATRIX_STACK_TYPE type)
+const Mat4& Director::getMatrix(MATRIX_STACK_TYPE type)
 {
-    Mat4 result;
-    if(MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW == type)
+    if(type == MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW)
     {
-        result = _modelViewMatrixStack.top();
+        return _modelViewMatrixStack.top();
     }
-    else if(MATRIX_STACK_TYPE::MATRIX_STACK_PROJECTION == type)
+    else if(type == MATRIX_STACK_TYPE::MATRIX_STACK_PROJECTION)
     {
-        result = _projectionMatrixStack.top();
+        return _projectionMatrixStack.top();
     }
-    else if(MATRIX_STACK_TYPE::MATRIX_STACK_TEXTURE == type)
+    else if(type == MATRIX_STACK_TYPE::MATRIX_STACK_TEXTURE)
     {
-        result = _textureMatrixStack.top();
+        return _textureMatrixStack.top();
     }
-    else
-    {
-        CCASSERT(false, "unknow matrix stack type, will return modelview matrix instead");
-        result =  _modelViewMatrixStack.top();
-    }
-//    float diffResult(0);
-//    for (int index = 0; index <16; ++index)
-//    {
-//        diffResult += abs(result2.mat[index] - result.mat[index]);
-//    }
-//    if(diffResult > 1e-30)
-//    {
-//        CCASSERT(false, "Error in director matrix stack");
-//    }
-    return result;
+
+    CCASSERT(false, "unknow matrix stack type, will return modelview matrix instead");
+    return  _modelViewMatrixStack.top();
 }
 
 void Director::setProjection(Projection projection)
@@ -713,23 +711,27 @@ void Director::setDepthTest(bool on)
     CHECK_GL_ERROR_DEBUG();
 }
 
+void Director::setClearColor(const Color4F& clearColor)
+{
+    _clearColor = clearColor;
+    glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+}
+
 static void GLToClipTransform(Mat4 *transformOut)
 {
     if(nullptr == transformOut) return;
     
     Director* director = Director::getInstance();
     CCASSERT(nullptr != director, "Director is null when seting matrix stack");
-    
-    Mat4 projection;
-    projection = director->getMatrix(MATRIX_STACK_TYPE::MATRIX_STACK_PROJECTION);
+
+    auto projection = director->getMatrix(MATRIX_STACK_TYPE::MATRIX_STACK_PROJECTION);
 
 #if CC_TARGET_PLATFORM == CC_PLATFORM_WP8
     //if needed, we need to undo the rotation for Landscape orientation in order to get the correct positions
     projection = Director::getInstance()->getOpenGLView()->getReverseOrientationMatrix() * projection;
 #endif
 
-    Mat4 modelview;
-    modelview = director->getMatrix(MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW);
+    auto modelview = director->getMatrix(MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW);
     *transformOut = projection * modelview;
 }
 
@@ -993,6 +995,7 @@ void Director::purgeDirector()
     GLProgramCache::destroyInstance();
     GLProgramStateCache::destroyInstance();
     FileUtils::destroyInstance();
+    AsyncTaskPool::destoryInstance();
 
     // cocos2d-x specific data structures
     UserDefault::destroyInstance();
@@ -1086,22 +1089,27 @@ void Director::showStats()
 {
     static unsigned long prevCalls = 0;
     static unsigned long prevVerts = 0;
+    static float prevDeltaTime  = 0.016; // 60FPS
+    static const float FPS_FILTER = 0.10;
 
-    ++_frames;
     _accumDt += _deltaTime;
     
     if (_displayStats && _FPSLabel && _drawnBatchesLabel && _drawnVerticesLabel)
     {
         char buffer[30];
 
+        float dt = _deltaTime * FPS_FILTER + (1-FPS_FILTER) * prevDeltaTime;
+        prevDeltaTime = dt;
+        _frameRate = 1/dt;
+
+        // Probably we don't need this anymore since
+        // the framerate is using a low-pass filter
+        // to make the FPS stable
         if (_accumDt > CC_DIRECTOR_STATS_INTERVAL)
         {
-            _frameRate = _frames / _accumDt;
-            _frames = 0;
-            _accumDt = 0;
-
             sprintf(buffer, "%.1f / %.3f", _frameRate, _secondsPerFrame);
             _FPSLabel->setString(buffer);
+            _accumDt = 0;
         }
 
         auto currentCalls = (unsigned long)_renderer->getDrawnBatches();
@@ -1118,8 +1126,7 @@ void Director::showStats()
             prevVerts = currentVerts;
         }
 
-        Mat4 identity = Mat4::IDENTITY;
-
+        const Mat4& identity = Mat4::IDENTITY;
         _drawnVerticesLabel->visit(_renderer, identity, 0);
         _drawnBatchesLabel->visit(_renderer, identity, 0);
         _FPSLabel->visit(_renderer, identity, 0);
@@ -1128,10 +1135,16 @@ void Director::showStats()
 
 void Director::calculateMPF()
 {
+    static float prevSecondsPerFrame = 0;
+    static const float MPF_FILTER = 0.10;
+
     struct timeval now;
     gettimeofday(&now, nullptr);
     
     _secondsPerFrame = (now.tv_sec - _lastUpdate->tv_sec) + (now.tv_usec - _lastUpdate->tv_usec) / 1000000.0f;
+
+    _secondsPerFrame = _secondsPerFrame * MPF_FILTER + (1-MPF_FILTER) * prevSecondsPerFrame;
+    prevSecondsPerFrame = _secondsPerFrame;
 }
 
 // returns the FPS image data pointer and len

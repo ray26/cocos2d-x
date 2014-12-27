@@ -58,6 +58,13 @@ namespace ui {
          */
         virtual ~Scale9Sprite();
         
+        
+        enum class State
+        {
+            NORMAL,
+            GRAY
+        };
+        
     public:
         static Scale9Sprite* create();
         
@@ -257,6 +264,11 @@ namespace ui {
         virtual void setContentSize(const Size & size) override;
         virtual void setAnchorPoint(const Vec2& anchorPoint) override;
         
+        /**
+         *@since v3.4
+         */
+        void setState(State state);
+        
         Size getOriginalSize() const;
         void setPreferredSize(const Size& size);
         Size getPreferredSize() const;
@@ -354,6 +366,16 @@ namespace ui {
          */
         virtual bool isFlippedY()const;
         
+        //override the setScale function of Node
+        virtual void setScaleX(float scaleX) override;
+        virtual void setScaleY(float scaleY) override;
+        virtual void setScale(float scale) override;
+        virtual void setScale(float scalex, float scaley) override;
+        using Node::setScaleZ;
+        virtual float getScaleX() const override;
+        virtual float getScaleY() const override;
+        virtual float getScale() const override;
+        using Node::getScaleZ;
     protected:
         void updateCapInset();
         void updatePositions();
