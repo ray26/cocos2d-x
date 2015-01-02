@@ -19,7 +19,7 @@
 
 # Misc Information
 
-* Full Changelog: https://github.com/cocos2d/cocos2d-x/blob/cocos2d-x-3.3/CHANGELOG
+* Full Changelog: https://github.com/cocos2d/cocos2d-x/blob/cocos2d-x-3.4beta0/CHANGELOG
 * v3.0 Release Notes can be found here: [v3.0 Release Notes](https://github.com/cocos2d/cocos2d-x/blob/cocos2d-x-3.0/docs/RELEASE_NOTES.md)
 
 # Requirements
@@ -135,3 +135,40 @@ void AsyncLoadSprite3DTest::asyncLoad_Callback(Sprite3D* sprite, void* param)
 }
 ```
 
+### Frustum culling
+
+Frustum culling means only the stuff that is inside the frustum is sent to the graphics hardware. It can potentially improve the performance of the application since only the vertices that are part of the visible part of the 3D world are kept on the graphics card memory.
+
+Frustum culling is a property of camera, it is enabled by default. And you can use the following to enable or disable the frustum culling,
+
+```c++
+//the first parameter is enable frustum culling or not, the second means that frustum culling using near and far plan or not.
+camera->enableFrustumCulling(true, true);
+```
+
+Note that when you can make sure that all the stuff is inside the frustum you can turn off the frustum culling.
+
+For more infomation please reffer to the cpptests/CameraTest
+
+### Use less resources to create  ui::CheckBox and ui::Slider 
+
+Now we could use less resources to create  ui::CheckBox and ui::Slider.
+
+To create an ui::CheckBox, we could simply pass the normal state box and active texture.
+
+```cpp
+CheckBox* checkBox2 = CheckBox::create("cocosui/check_box_normal.png",
+                                              "cocosui/check_box_active.png");
+```
+
+To create an ui::Slider, we could only pass the slider bar texture and normal ball texture.
+
+```cpp
+Slider* sliderScale9 = Slider::create("cocosui/slidbar.png", "cocosui/sliderballnormal.png");
+```
+
+If the selected state texture is missing, when user press the widget, the normal texture will scale.
+
+If the disable state texture is missing, when the widget is in disable state, we use gray shader to turn the normal state texture to gray.
+
+The original ui::Button also support the gray shader enhancement.
