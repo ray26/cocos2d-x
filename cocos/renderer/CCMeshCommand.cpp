@@ -111,6 +111,8 @@ void MeshCommand::init(float globalZOrder,
 {
     CCASSERT(glProgramState, "GLProgramState cannot be nill");
     
+    RenderCommand::init(globalZOrder, mv, flags);
+    
     _globalOrder = globalZOrder;
     _textureID = textureID;
     _blendType = blendType;
@@ -192,8 +194,8 @@ MeshCommand::~MeshCommand()
 
 void MeshCommand::applyRenderState()
 {
-    _renderStateCullFaceEnabled = glIsEnabled(GL_CULL_FACE);
-    _renderStateDepthTest = glIsEnabled(GL_DEPTH_TEST);
+    _renderStateCullFaceEnabled = glIsEnabled(GL_CULL_FACE) != GL_FALSE;
+    _renderStateDepthTest = glIsEnabled(GL_DEPTH_TEST) != GL_FALSE;
     glGetBooleanv(GL_DEPTH_WRITEMASK, &_renderStateDepthWrite);
     GLint cullface;
     glGetIntegerv(GL_CULL_FACE_MODE, &cullface);
@@ -295,7 +297,8 @@ void MeshCommand::batchDraw()
     _glProgramState->applyGLProgram(_mv);
     _glProgramState->applyUniforms();
 
-    if (Director::getInstance()->getRunningScene()->getLights().size() > 0)
+    const auto& scene = Director::getInstance()->getRunningScene();
+    if (scene && scene->getLights().size() > 0)
         setLightUniforms();
     
     // Draw
@@ -337,7 +340,8 @@ void MeshCommand::execute()
     
     _glProgramState->apply(_mv);   
 
-    if (Director::getInstance()->getRunningScene()->getLights().size() > 0)
+    const auto& scene = Director::getInstance()->getRunningScene();
+    if (scene && scene->getLights().size() > 0)
         setLightUniforms();
     
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBuffer);
